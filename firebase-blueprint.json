@@ -1,0 +1,78 @@
+{
+  "entities": {
+    "Job": {
+      "title": "Job",
+      "description": "A job opportunity posted by an employer.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 150 },
+        "company": { "type": "string", "maxLength": 100 },
+        "industry": { "type": "string", "maxLength": 50 },
+        "location": { "type": "string", "maxLength": 100 },
+        "remote": { "type": "boolean" },
+        "type": { "type": "string", "maxLength": 30 },
+        "salaryMin": { "type": "number" },
+        "salaryMax": { "type": "number" },
+        "postedDaysAgo": { "type": "number" },
+        "deadline": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "applicantsCount": { "type": "number" },
+        "status": { "type": "string", "maxLength": 30 },
+        "featured": { "type": "boolean" },
+        "employerEmail": { "type": "string", "maxLength": 120 },
+        "employerName": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["title", "company", "description", "status"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "Candidate job application submission.",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "title": { "type": "string", "maxLength": 100 },
+        "location": { "type": "string", "maxLength": 100 },
+        "coverNote": { "type": "string", "maxLength": 3000 },
+        "resumeSummary": { "type": "string", "maxLength": 4000 },
+        "status": { "type": "string", "maxLength": 30 },
+        "atsScore": { "type": "number" },
+        "date": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["jobId", "fullName", "email"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role and contact preferences.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 120 },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["seeker", "employer"] },
+        "title": { "type": "string", "maxLength": 100 },
+        "company": { "type": "string", "maxLength": 100 },
+        "initials": { "type": "string", "maxLength": 10 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["email", "fullName", "role"]
+    }
+  },
+  "firestore": {
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/Job" },
+      "description": "Collection of all open and closed job positions."
+    },
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/Application" },
+      "description": "Collection of applications submitted by job seekers."
+    },
+    "/user_profiles/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User account profiles."
+    }
+  }
+}
