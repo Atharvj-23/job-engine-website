@@ -238,21 +238,24 @@ const INITIAL_APPLICANTS = [
 
 export default function App() {
   // --- AUTHENTICATION STATE ---
-  const [currentUser, setCurrentUser] = useState(() => {
+  const [currentUser, setCurrentUser] = useState<any>(() => {
     const saved = localStorage.getItem('je_user');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
     return {
-      isLoggedIn: true,
+      isLoggedIn: false,
       role: 'seeker', // 'seeker' | 'employer'
-      name: 'Dr. Alex Mercer',
-      email: 'alex.mercer@bioeng.io',
-      title: 'PharmD & Cloud Systems Specialist',
-      initials: 'AM',
-      company: 'BioEng Labs'
+      name: '',
+      email: '',
+      title: 'Guest Candidate',
+      initials: '?',
+      company: ''
     };
   });
+
+  const [pendingApplyJob, setPendingApplyJob] = useState<any>(null);
+  const [authPromptReason, setAuthPromptReason] = useState<string | null>(null);
 
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -262,6 +265,18 @@ export default function App() {
     role: 'seeker' as 'seeker' | 'employer',
     name: ''
   });
+
+  // Handler to require login before applying
+  const handleInitiateApply = (job: any) => {
+    if (!currentUser?.isLoggedIn) {
+      setPendingApplyJob(job);
+      setAuthPromptReason(`Please sign in or create an account to apply for "${job.title}" at ${job.company}.`);
+      setLoginModalOpen(true);
+      showToast('Sign in required to apply for this job', 'info');
+      return;
+    }
+    setApplyModalJob(job);
+  };
 
   // --- ROLE & TAB STATE ---
   const [roleMode, setRoleMode] = useState<'seeker' | 'employer'>(currentUser?.role || 'seeker');
@@ -406,9 +421,9 @@ export default function App() {
   const [viewingJob, setViewingJob] = useState<any>(null);
   const [applyModalJob, setApplyModalJob] = useState<any>(null);
   const [applyForm, setApplyForm] = useState({
-    fullName: currentUser?.name || 'Dr. Alex Mercer',
-    email: currentUser?.email || 'alex.mercer@bioeng.io',
-    phone: '+1 (555) 234-5678',
+    fullName: currentUser?.name || '',
+    email: currentUser?.email || '',
+    phone: '',
     coverNote: ''
   });
 
@@ -526,14 +541,24 @@ PharmD, Clinical Pharmacy, Python, SQL, AWS Fundamentals, EHR Systems, HIPAA Com
     e.preventDefault();
     if (!applyModalJob) return;
 
+    // Strict validation: user must be authenticated to submit
+    if (!currentUser?.isLoggedIn) {
+      setPendingApplyJob(applyModalJob);
+      setApplyModalJob(null);
+      setAuthPromptReason(`Please sign in or create an account to submit your application for ${applyModalJob.title}.`);
+      setLoginModalOpen(true);
+      showToast('Sign in required to submit application', 'error');
+      return;
+    }
+
     const newApplication = {
       id: `app-${Date.now()}`,
       jobId: applyModalJob.id,
       jobTitle: applyModalJob.title,
       company: applyModalJob.company,
-      fullName: applyForm.fullName,
-      title: 'Applicant / Specialist',
-      email: applyForm.email,
+      fullName: applyForm.fullName || currentUser?.name || 'Applicant',
+      title: currentUser?.title || 'Applicant / Specialist',
+      email: applyForm.email || currentUser?.email || '',
       phone: applyForm.phone || '+1 (555) 000-0000',
       location: applyModalJob.location || 'Remote',
       date: new Date().toISOString().split('T')[0],
@@ -592,6 +617,12 @@ PharmD, Clinical Pharmacy, Python, SQL, AWS Fundamentals, EHR Systems, HIPAA Com
 
   const handlePostJob = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser?.isLoggedIn) {
+      setAuthPromptReason('Please sign in or create an Employer account to publish a job posting.');
+      setLoginModalOpen(true);
+      showToast('Sign in required to publish jobs', 'error');
+      return;
+    }
     if (!postJobForm.title || !postJobForm.company) {
       showToast('Please fill in all required job fields', 'error');
       return;
@@ -807,8 +838,9 @@ Return valid JSON with this exact structure:
 
   // Quick Account Login presets
   const handleQuickLogin = (role: 'seeker' | 'employer') => {
+    let u: any;
     if (role === 'seeker') {
-      const u = {
+      u = {
         isLoggedIn: true,
         role: 'seeker',
         name: 'Dr. Alex Mercer',
@@ -817,13 +849,11 @@ Return valid JSON with this exact structure:
         initials: 'AM',
         company: 'BioEng Labs'
       };
-      setCurrentUser(u);
       setRoleMode('seeker');
       setActiveTab('feed');
-      localStorage.setItem('je_user', JSON.stringify(u));
       showToast('Logged in as Job Seeker (Dr. Alex Mercer)');
     } else {
-      const u = {
+      u = {
         isLoggedIn: true,
         role: 'employer',
         name: 'Jordan Miller (HR Director)',
@@ -832,13 +862,30 @@ Return valid JSON with this exact structure:
         initials: 'JM',
         company: 'Apex Cloud Solutions'
       };
-      setCurrentUser(u);
       setRoleMode('employer');
       setActiveTab('my-posted-jobs');
-      localStorage.setItem('je_user', JSON.stringify(u));
       showToast('Logged in as Employer (Apex Cloud Recruiting)');
     }
+    completeAuthAndResume(u);
+  };
+
+  const completeAuthAndResume = (u: any) => {
+    setCurrentUser(u);
+    localStorage.setItem('je_user', JSON.stringify(u));
     setLoginModalOpen(false);
+
+    if (pendingApplyJob) {
+      const targetJob = pendingApplyJob;
+      setPendingApplyJob(null);
+      setAuthPromptReason(null);
+      setApplyForm(prev => ({
+        ...prev,
+        fullName: u.name || prev.fullName,
+        email: u.email || prev.email
+      }));
+      setApplyModalJob(targetJob);
+      showToast(`Welcome ${u.name}! Please review and submit your application for ${targetJob.title}.`);
+    }
   };
 
   const handleLogout = () => {
@@ -853,6 +900,8 @@ Return valid JSON with this exact structure:
       company: ''
     };
     setCurrentUser(u);
+    setPendingApplyJob(null);
+    setAuthPromptReason(null);
     localStorage.setItem('je_user', JSON.stringify(u));
     showToast('Logged out successfully', 'info');
     setLoginModalOpen(false);
@@ -878,10 +927,8 @@ Return valid JSON with this exact structure:
         initials: initials || 'GU',
         company: roleMode === 'employer' ? 'Apex Cloud Solutions' : 'JobEngine Seeker'
       };
-      setCurrentUser(u);
-      localStorage.setItem('je_user', JSON.stringify(u));
       showToast(`Signed in with Google as ${user.displayName || user.email}!`);
-      setLoginModalOpen(false);
+      completeAuthAndResume(u);
 
       // Write user profile to shared Firestore
       await setDoc(doc(db, 'user_profiles', user.uid), {
@@ -924,11 +971,9 @@ Return valid JSON with this exact structure:
       company: loginForm.role === 'employer' ? 'Apex Cloud Solutions' : 'JobEngine Candidate'
     };
 
-    setCurrentUser(u);
     setRoleMode(loginForm.role);
-    localStorage.setItem('je_user', JSON.stringify(u));
     showToast(authMode === 'signup' ? `Account registered for ${u.name}!` : `Signed in as ${u.name}!`);
-    setLoginModalOpen(false);
+    completeAuthAndResume(u);
 
     // Save profile to Firestore
     try {
@@ -1434,10 +1479,10 @@ Return valid JSON with this exact structure:
                             </span>
                           ) : (
                             <button
-                              onClick={() => setApplyModalJob(job)}
-                              className="text-xs font-bold text-slate-900 hover:text-indigo-600 flex items-center gap-1.5 py-1 px-2.5 rounded-md hover:bg-slate-100 min-h-[36px]"
+                              onClick={() => handleInitiateApply(job)}
+                              className="text-xs font-bold text-slate-900 hover:text-indigo-600 flex items-center gap-1.5 py-1.5 px-3 rounded-md hover:bg-slate-100 min-h-[36px] transition-colors"
                             >
-                              <span>Quick Apply</span>
+                              <span>{currentUser?.isLoggedIn ? 'Quick Apply' : 'Sign In to Apply'}</span>
                               <ArrowRight className="w-3 h-3" />
                             </button>
                           )}
@@ -2293,12 +2338,22 @@ Return valid JSON with this exact structure:
                 </p>
               </div>
               <button 
-                onClick={() => setLoginModalOpen(false)}
+                onClick={() => { setLoginModalOpen(false); setAuthPromptReason(null); }}
                 className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {authPromptReason && (
+              <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-bold text-amber-900">Sign In Required</p>
+                  <p className="text-amber-800 mt-0.5">{authPromptReason}</p>
+                </div>
+              </div>
+            )}
 
             {currentUser?.isLoggedIn ? (
               /* LOGGED IN USER PROFILE VIEW */
@@ -2516,6 +2571,32 @@ Return valid JSON with this exact structure:
                     <span>{authMode === 'signin' ? 'Sign In' : 'Create Account'}</span>
                   </button>
                 </form>
+
+                {/* 1-Click Fast Demo Credentials for Reviewers / Testers */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                    <span>QUICK TESTING PRESETS</span>
+                    <span>1-CLICK</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('seeker')}
+                      className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-colors min-h-[36px]"
+                    >
+                      <User className="w-3 h-3 text-indigo-500" />
+                      <span>Test as Seeker</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('employer')}
+                      className="p-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-colors min-h-[36px]"
+                    >
+                      <Building2 className="w-3 h-3 text-emerald-500" />
+                      <span>Test as Employer</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -2786,11 +2867,15 @@ Return valid JSON with this exact structure:
                 </div>
               ) : (
                 <button 
-                  onClick={() => { setApplyModalJob(viewingJob); setViewingJob(null); }}
+                  onClick={() => {
+                    const job = viewingJob;
+                    setViewingJob(null);
+                    handleInitiateApply(job);
+                  }}
                   className="flex-1 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-2 text-xs min-h-[44px]"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Quick Apply Now</span>
+                  <span>{currentUser?.isLoggedIn ? 'Quick Apply Now' : 'Sign In to Apply'}</span>
                 </button>
               )}
             </div>
@@ -2818,7 +2903,34 @@ Return valid JSON with this exact structure:
               </button>
             </div>
 
-            <form onSubmit={handleApplySubmit} className="p-4 sm:p-6 space-y-3.5 bg-white overflow-y-auto flex-1">
+            {!currentUser?.isLoggedIn ? (
+              <div className="p-6 text-center space-y-4">
+                <div className="w-12 h-12 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto">
+                  <LogIn className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-900 text-base">Sign In Required</h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                    You must be signed in to apply for <strong>{applyModalJob.title}</strong> at <strong>{applyModalJob.company}</strong> so the hiring team can review your application profile and contact you.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const job = applyModalJob;
+                    setPendingApplyJob(job);
+                    setApplyModalJob(null);
+                    setAuthPromptReason(`Please sign in or create an account to apply for "${job.title}".`);
+                    setLoginModalOpen(true);
+                  }}
+                  className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs sm:text-sm min-h-[44px] flex items-center justify-center gap-2 shadow-xs transition-all"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Sign In / Create Account to Apply</span>
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleApplySubmit} className="p-4 sm:p-6 space-y-3.5 bg-white overflow-y-auto flex-1">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Candidate Full Name *</label>
                 <input 
@@ -2874,8 +2986,9 @@ Return valid JSON with this exact structure:
                 </button>
               </div>
             </form>
-          </div>
+          )}
         </div>
+      </div>
       )}
 
       {/* --- MODAL DIALOG: PREVIEW EMAIL ALERT --- */}
